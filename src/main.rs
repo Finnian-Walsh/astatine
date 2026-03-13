@@ -5,12 +5,12 @@ mod syntax;
 
 use std::{fs, path::Path, process::Command};
 
-use clap::Parser;
+use clap::Parser as ClapParser;
 use cli::Cli;
 use color_eyre::eyre::{Context, Result, eyre};
 use thiserror::Error;
 
-use crate::lexer::Lexer;
+use crate::{lexer::Lexer, parser::Parser};
 
 #[derive(Debug, Error)]
 #[error("Could not convert to assembly")]
@@ -82,7 +82,11 @@ fn main() -> Result<()> {
 
     let lexer = Lexer::new(&contents);
     let tokens = lexer.tokenize()?;
-    println!("{tokens:?}");
+    println!("Tokens: {tokens:#?}");
+
+    let ast = Parser::new(&tokens).parse()?;
+
+    println!("AST: {ast:#?}");
 
     // let asm = tokens_to_asm(tokens)?;
     let asm = "

@@ -5,19 +5,85 @@ use std::{
 
 use thiserror::Error;
 
-use crate::syntax::{BinaryOp, Keyword, LiteralKind, OperatorConversionError};
+use crate::syntax::{BinaryOp, Bracket, Keyword, LiteralKind, OperatorConversionError};
 
-#[allow(unused)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
+    /// A reference to an entity in the code (e.g. a variable, function or type)
+    /// See [`Token`] for more types of tokens
     Identifier(String),
+
+    /// A keyword of the language (e.g. `return`)
+    /// See [`Token`] for more types of tokens
     Keyword(Keyword),
+
+    /// A literal value in the code (e.g. 6, 0.1 or "hello")
+    /// See [`Token`] for more types of tokens
     Literal { kind: LiteralKind, value: String },
+
+    /// A semicolon (`;`) symbol in the code that marks the end of a statement
+    /// See [`Token`] for more types of tokens
     Semicolon,
+
+    /// A comma (`,`) symbol in the code that separates items in a sequence (e.g. args)
+    /// See [`Token`] for more types of tokens
     Comma,
+
+    /// A period (`.`) symbol in the code, used to access members of modules or objects
+    /// See [`Token`] for more types of tokens
     Period,
 
+    /// An equals (`=`) symbol in the code, used to assign
+    /// See [`Token`] for more types of tokens
+    Equals,
+
+    /// An operator which has lhs and rhs operands (e.g. add)
+    /// See [`Token`] for more types of tokens
     BinaryOp(BinaryOp),
+
+    /// A syntactic symbol
+    /// See [`Token`] for more types of tokens
+    Bracket(Bracket),
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum Precedence {
+    MulDivMod = 1,
+    AddSub = 2,
+    Shift = 3,
+    BitAnd = 4,
+    Xor = 5,
+    BitOr = 6,
+    EqNeLtGtLeGe = 7,
+    And = 8,
+    Or = 9,
+
+    Default = 255,
+}
+
+impl Token {
+    fn precedence(&self) -> Precedence {
+        if let Self::BinaryOp(op) = self {
+            match op {
+                BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => Precedence::MulDivMod,
+                BinaryOp::Add | BinaryOp::Subtract => Precedence::AddSub,
+                BinaryOp::ShiftL | BinaryOp::ShiftR => Precedence::Shift,
+                BinaryOp::BitAnd => Precedence::BitAnd,
+                BinaryOp::Xor => Precedence::Xor,
+                BinaryOp::BitOr => Precedence::BitOr,
+                BinaryOp::Equal
+                | BinaryOp::Unequal
+                | BinaryOp::LessThan
+                | BinaryOp::GreaterThan
+                | BinaryOp::LessOrEqual
+                | BinaryOp::GreaterOrEqual => Precedence::EqNeLtGtLeGe,
+                BinaryOp::And => Precedence::And,
+                BinaryOp::Or => Precedence::Or,
+            }
+        } else {
+            Precedence::Default
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -108,13 +174,31 @@ impl<'a> Lexer<'a> {
                 c if c.is_whitespace() => {
                     self.chars.next();
                 }
-                'a'..='z' => qualify_result(self.tokenize_identifier_or_keyword(), self.line)?,
+                'A'..='Z' | 'a'..='z' => {
+                    qualify_result(self.tokenize_identifier_or_keyword(), self.line)?
+                }
                 ';' => {
                     self.tokens.push(Token::Semicolon);
                     self.chars.next();
                 }
                 c if "*/%+-<>&|=!".contains(c) => {
-                    qualify_result(self.tokenize_binary_op(), self.line)?;
+                    qualify_result(self.tokenize_op(), self.line)?;
+                }
+                '(' => {
+                    self.tokens.push(Token::Bracket(Bracket::LeftParen));
+                    self.chars.next().unwrap();
+                }
+                ')' => {
+                    self.tokens.push(Token::Bracket(Bracket::RightParen));
+                    self.chars.next().unwrap();
+                }
+                '{' => {
+                    self.tokens.push(Token::Bracket(Bracket::LeftCurly));
+                    self.chars.next().unwrap();
+                }
+                '}' => {
+                    self.tokens.push(Token::Bracket(Bracket::RightCurly));
+                    self.chars.next().unwrap();
                 }
                 _ => {
                     panic!("Unknown symbol {ch}");
@@ -263,7 +347,7 @@ impl<'a> Lexer<'a> {
 
         while let Some(&ch) = self.chars.peek() {
             match ch {
-                'a'..='z' | '0'..='9' => {
+                'A'..='Z' | 'a'..='z' | '0'..='9' | '_' => {
                     accumulator.push(ch);
                     self.chars.next();
                 }
@@ -282,7 +366,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn tokenize_binary_op(&mut self) -> Result<(), TokenizeError> {
+    fn tokenize_op(&mut self) -> Result<(), TokenizeError> {
         let mut op_str = String::new();
 
         for ch in self.chars.by_ref() {
@@ -291,6 +375,11 @@ impl<'a> Lexer<'a> {
             }
 
             op_str.push(ch);
+        }
+
+        if op_str == "=" {
+            self.tokens.push(Token::Equals);
+            return Ok(());
         }
 
         let binary_op = BinaryOp::try_from(op_str)?;

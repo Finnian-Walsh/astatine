@@ -13,6 +13,7 @@ pub enum BinaryOp {
 
     ShiftL,
     ShiftR,
+
     BitAnd,
     Xor,
     BitOr,
@@ -73,7 +74,6 @@ impl TryFrom<&str> for BinaryOp {
     }
 }
 
-#[allow(unused)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiteralKind {
     Char,
@@ -102,10 +102,11 @@ impl FromStr for Keyword {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "const" => Ok(Self::Const),
             "continue" => Ok(Self::Continue),
             "break" => Ok(Self::Break),
             "for" => Ok(Self::For),
-            "func" => Ok(Self::Func),
+            "fn" => Ok(Self::Func),
             "else" => Ok(Self::Else),
             "if" => Ok(Self::If),
             "let" => Ok(Self::Let),
@@ -115,4 +116,16 @@ impl FromStr for Keyword {
             _ => Err(()),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Bracket {
+    LeftParen,
+    RightParen,
+
+    LeftCurly,
+    RightCurly,
+
+    LeftSquare,
+    RightSquare,
 }
