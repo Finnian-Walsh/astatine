@@ -377,14 +377,24 @@ impl<'a> Lexer<'a> {
             op_str.push(ch);
         }
 
-        if op_str == "=" {
-            self.tokens.push(Token::Equals);
-            return Ok(());
+        match op_str.as_str() {
+            "=" => {
+                self.tokens.push(Token::Equals);
+                Ok(())
+            }
+            "//" => {
+                for ch in self.chars.by_ref() {
+                    if ch == '\n' {
+                        break;
+                    }
+                }
+                Ok(())
+            }
+            _ => {
+                let binary_op = BinaryOp::try_from(op_str)?;
+                self.tokens.push(Token::BinaryOp(binary_op));
+                Ok(())
+            }
         }
-
-        let binary_op = BinaryOp::try_from(op_str)?;
-        self.tokens.push(Token::BinaryOp(binary_op));
-
-        Ok(())
     }
 }
