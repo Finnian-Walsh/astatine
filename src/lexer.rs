@@ -5,11 +5,11 @@ use std::{
 
 use thiserror::Error;
 
-use crate::syntax::{BinaryOp, Bracket, Keyword, LiteralKind, OperatorConversionError};
+use crate::syntax::{Keyword, LiteralKind};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
-    /// A reference to an entity in the code (e.g. a variable, function or type)
+    /// A reference to an entity (e.g. a variable, function or type)
     /// See [`Token`] for more types of tokens
     Identifier(String),
 
@@ -17,73 +17,89 @@ pub enum Token {
     /// See [`Token`] for more types of tokens
     Keyword(Keyword),
 
-    /// A literal value in the code (e.g. 6, 0.1 or "hello")
+    /// A literal value (e.g. 6, 0.1 or "hello")
     /// See [`Token`] for more types of tokens
-    Literal { kind: LiteralKind, value: String },
+    Literal {
+        kind: LiteralKind,
+        value: String,
+    },
 
-    /// A semicolon (`;`) symbol in the code that marks the end of a statement
+    LeftParen,
+    RightParen,
+
+    LeftCurly,
+    RightCurly,
+
+    LeftSquare,
+    RightSquare,
+
+    /// An ampersand symbol (`&`)
     /// See [`Token`] for more types of tokens
-    Semicolon,
+    Amp,
 
-    /// A comma (`,`) symbol in the code that separates items in a sequence (e.g. args)
+    /// A double ampersand symbol (`&&`)
     /// See [`Token`] for more types of tokens
-    Comma,
+    AndAnd,
 
-    /// A period (`.`) symbol in the code, used to access members of modules or objects
+    /// A pipe symbol (`|`) used for bitwise or
+    /// See [`Token`] for more types of tokens
+    Pipe,
+
+    /// A double pipe symbol (`||`) used for logical or
+    /// See [`Token`] for more types of tokens
+    OrOr,
+
+    /// An exclamation mark (`!`)
+    /// See [`Token`] for more types of tokens
+    Bang,
+
+    /// A bang and an equals symbol (`!=`) used for inequality
+    /// See [`Token`] for more types of tokens
+    BangEq,
+
+    /// An equals symbol (`=`) used for assignment
+    /// See [`Token`] for more types of tokens
+    Eq,
+
+    /// A double equals symbol (`==`) used for equality
+    /// See [`Token`] for more types of tokens
+    EqEq,
+
+    /// A period (`.`) symbol, used to access members of modules or objects
     /// See [`Token`] for more types of tokens
     Period,
 
-    /// An equals (`=`) symbol in the code, used to assign
+    /// A comma (`,`) symbol that separates items in a sequence (e.g. args)
     /// See [`Token`] for more types of tokens
-    Equals,
+    Comma,
 
-    /// An operator which has lhs and rhs operands (e.g. add)
+    /// A colon (`:`) symbol that indicates a type
     /// See [`Token`] for more types of tokens
-    BinaryOp(BinaryOp),
+    Colon,
 
-    /// A syntactic symbol
+    /// A semicolon (`;`) symbol that marks the end of a statement
     /// See [`Token`] for more types of tokens
-    Bracket(Bracket),
-}
+    Semicolon,
 
-#[derive(Debug, PartialEq, PartialOrd)]
-pub enum Precedence {
-    MulDivMod = 1,
-    AddSub = 2,
-    Shift = 3,
-    BitAnd = 4,
-    Xor = 5,
-    BitOr = 6,
-    EqNeLtGtLeGe = 7,
-    And = 8,
-    Or = 9,
+    /// An asterisk (`*`) symbol, used for multiplication and dereferencing
+    /// See [`Token`] for more types of tokens
+    Asterisk,
 
-    Default = 255,
-}
+    /// A slash (`/`) symbol, used for division
+    /// See [`Token`] for more types of tokens
+    Slash,
 
-impl Token {
-    fn precedence(&self) -> Precedence {
-        if let Self::BinaryOp(op) = self {
-            match op {
-                BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => Precedence::MulDivMod,
-                BinaryOp::Add | BinaryOp::Subtract => Precedence::AddSub,
-                BinaryOp::ShiftL | BinaryOp::ShiftR => Precedence::Shift,
-                BinaryOp::BitAnd => Precedence::BitAnd,
-                BinaryOp::Xor => Precedence::Xor,
-                BinaryOp::BitOr => Precedence::BitOr,
-                BinaryOp::Equal
-                | BinaryOp::Unequal
-                | BinaryOp::LessThan
-                | BinaryOp::GreaterThan
-                | BinaryOp::LessOrEqual
-                | BinaryOp::GreaterOrEqual => Precedence::EqNeLtGtLeGe,
-                BinaryOp::And => Precedence::And,
-                BinaryOp::Or => Precedence::Or,
-            }
-        } else {
-            Precedence::Default
-        }
-    }
+    /// A percent (`%`) symbol, used for modulo
+    /// See [`Token`] for more types of tokens
+    Percent,
+
+    /// A plus (`+`) symbol, used for addition and indicating positivity
+    /// See [`Token`] for more types of tokens
+    Plus,
+
+    /// A minus (`-`) symbol, used for subtraction and negation
+    /// See [`Token`] for more types of tokens
+    Minus,
 }
 
 #[derive(Debug, Error)]
@@ -91,7 +107,7 @@ pub enum MalformedLiteralError {
     #[error("Empty character")]
     EmptyChar,
 
-    #[error("Invalid escape sequence: `{0}`")]
+    #[error("Invalid escape sequence: `\\{0}`")]
     InvalidEscapeSequence(String),
 
     #[error("Invalid numeric literal")]
@@ -102,24 +118,15 @@ pub enum MalformedLiteralError {
 
     #[error("Unterminated character")]
     UnterminatedCharacter,
-
-    #[error("{0}")]
-    OperatorConversionError(#[from] OperatorConversionError),
 }
 
 #[derive(Debug, Error)]
 pub enum TokenizeError {
+    #[error("Invalid punctuation: {0}")]
+    InvalidPunctuation(String),
+
     #[error("Malformed literal: {0}")]
     MalformedLiteral(#[from] MalformedLiteralError),
-
-    #[error("Unrecognized symbol: {0}")]
-    UnrecognizedSymbol(char),
-}
-
-impl From<OperatorConversionError> for TokenizeError {
-    fn from(value: OperatorConversionError) -> Self {
-        Self::MalformedLiteral(MalformedLiteralError::OperatorConversionError(value))
-    }
 }
 
 impl TokenizeError {
@@ -145,12 +152,7 @@ pub struct Lexer<'a> {
     line: usize,
 }
 
-fn qualify_result<T, E>(res: Result<T, E>, line: usize) -> Result<T, QualifiedTokenizeError>
-where
-    TokenizeError: From<E>,
-{
-    res.map_err(|e| TokenizeError::from(e).qualify(line))
-}
+const PUNCTUATION_CHARS: &str = "(){}[]&|!=.,;*/%+-:";
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
@@ -161,49 +163,38 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn match_char(&mut self, ch: char) -> Result<(), TokenizeError> {
+        match ch {
+            '0'..='9' | '-' => self.tokenize_number()?,
+            '\'' => self.tokenize_character()?,
+            '"' => self.tokenize_string()?,
+            '\n' => {
+                self.chars.next();
+                self.line += 1;
+            }
+            c if c.is_whitespace() => {
+                self.chars.next();
+            }
+            'A'..='Z' | 'a'..='z' => self.tokenize_identifier_or_keyword()?,
+            ';' => {
+                self.tokens.push(Token::Semicolon);
+                self.chars.next();
+            }
+            c if PUNCTUATION_CHARS.contains(c) => self.tokenize_punctuation()?,
+            _ => {
+                panic!("Unknown symbol `{ch}`");
+            }
+        };
+
+        Ok(())
+    }
+
     pub fn tokenize(mut self) -> Result<Vec<Token>, QualifiedTokenizeError> {
         while let Some(&ch) = self.chars.peek() {
-            match ch {
-                '0'..='9' | '-' => qualify_result(self.tokenize_number(), self.line)?,
-                '\'' => qualify_result(self.tokenize_character(), self.line)?,
-                '"' => qualify_result(self.tokenize_string(), self.line)?,
-                '\n' => {
-                    self.chars.next();
-                    self.line += 1;
-                }
-                c if c.is_whitespace() => {
-                    self.chars.next();
-                }
-                'A'..='Z' | 'a'..='z' => {
-                    qualify_result(self.tokenize_identifier_or_keyword(), self.line)?
-                }
-                ';' => {
-                    self.tokens.push(Token::Semicolon);
-                    self.chars.next();
-                }
-                c if "*/%+-<>&|=!".contains(c) => {
-                    qualify_result(self.tokenize_op(), self.line)?;
-                }
-                '(' => {
-                    self.tokens.push(Token::Bracket(Bracket::LeftParen));
-                    self.chars.next().unwrap();
-                }
-                ')' => {
-                    self.tokens.push(Token::Bracket(Bracket::RightParen));
-                    self.chars.next().unwrap();
-                }
-                '{' => {
-                    self.tokens.push(Token::Bracket(Bracket::LeftCurly));
-                    self.chars.next().unwrap();
-                }
-                '}' => {
-                    self.tokens.push(Token::Bracket(Bracket::RightCurly));
-                    self.chars.next().unwrap();
-                }
-                _ => {
-                    panic!("Unknown symbol {ch}");
-                }
-            }
+            self.match_char(ch).map_err(|e| QualifiedTokenizeError {
+                tokenize_error: e,
+                line: self.line,
+            })?;
         }
 
         Ok(self.tokens)
@@ -232,26 +223,27 @@ impl<'a> Lexer<'a> {
                 '_' => {
                     self.chars.next();
                 }
-                c if c.is_whitespace() || ";,(){}[]".contains(c) => break,
-                _ => {
-                    accumulator.push(ch);
-                    return Err(MalformedLiteralError::InvalidNumber(accumulator));
-                }
+                _ => break,
             }
         }
 
         self.tokens.push(Token::Literal {
-            kind: LiteralKind::Integer,
+            kind: if period {
+                LiteralKind::Float
+            } else {
+                LiteralKind::Integer
+            },
             value: accumulator,
         });
 
         Ok(())
     }
 
-    fn handle_escaped_character(&mut self) -> Result<char, MalformedLiteralError> {
-        let Some(ch) = self.chars.peek() else {
-            return Err(MalformedLiteralError::UnterminatedCharacter);
-        };
+    fn handle_escaped_seq(&mut self) -> Result<char, MalformedLiteralError> {
+        let ch = self
+            .chars
+            .next()
+            .ok_or(MalformedLiteralError::UnterminatedCharacter)?;
 
         Ok(match ch {
             'n' => '\n',
@@ -261,12 +253,42 @@ impl<'a> Lexer<'a> {
             '\'' => '\'',
             '\"' => '\"',
             '0' => '\0',
-            'u' => todo!("Add unicode escape sequencing"),
+            'u' => {
+                let bracket = self
+                    .chars
+                    .next()
+                    .ok_or(MalformedLiteralError::UnterminatedCharacter)?;
+
+                if bracket != '{' {
+                    return Err(MalformedLiteralError::InvalidEscapeSequence(
+                        bracket.to_string(),
+                    ));
+                }
+
+                let mut hex = String::new();
+
+                for ch in self.chars.by_ref() {
+                    match ch {
+                        'a'..='f' | 'A'..='F' | '0'..='9' => hex.push(ch),
+                        '}' => break,
+                        _ => {
+                            return Err(MalformedLiteralError::InvalidEscapeSequence(format!(
+                                "u{{{hex}{ch}"
+                            )));
+                        }
+                    }
+                }
+
+                let num = u32::from_str_radix(&hex, 16).map_err(|_| {
+                    MalformedLiteralError::InvalidEscapeSequence(format!("u{{{hex}}}"))
+                })?;
+
+                char::from_u32(num).ok_or_else(|| {
+                    MalformedLiteralError::InvalidEscapeSequence(format!("u{{{hex}}}"))
+                })?
+            }
             _ => {
-                return Err(MalformedLiteralError::InvalidEscapeSequence(format!(
-                    "\\{}",
-                    ch
-                )));
+                return Err(MalformedLiteralError::InvalidEscapeSequence(ch.to_string()));
             }
         })
     }
@@ -275,30 +297,27 @@ impl<'a> Lexer<'a> {
         let mut escape = false;
         let mut chars = String::new();
 
-        while let Some(ch) = self.chars.next() {
-            match ch {
-                '\'' if !escape => {
-                    self.chars.next();
-                    break;
+        self.chars.next();
+
+        while let Some(&ch) = self.chars.peek() {
+            if escape {
+                chars.push(self.handle_escaped_seq()?);
+                escape = false;
+            } else {
+                match ch {
+                    '\'' => break,
+                    '\\' => escape = true,
+                    '\n' => return Err(MalformedLiteralError::UnterminatedCharacter),
+                    _ => chars.push(ch),
                 }
-                '\\' if !escape => {
-                    escape = true;
-                }
-                '\n' => {
-                    return Err(MalformedLiteralError::UnterminatedCharacter);
-                }
-                _ => {
-                    if escape {
-                        chars.push(self.handle_escaped_character()?);
-                        escape = false;
-                    } else {
-                        chars.push(ch);
-                    }
-                }
+
+                self.chars.next();
             }
         }
 
-        match chars.len() {
+        self.chars.next();
+
+        match chars.chars().count() {
             0 => return Err(MalformedLiteralError::EmptyChar),
             1 => self.tokens.push(Token::Literal {
                 kind: LiteralKind::Char,
@@ -310,29 +329,33 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn tokenize_string(&mut self) -> Result<(), TokenizeError> {
+    fn tokenize_string(&mut self) -> Result<(), MalformedLiteralError> {
         let mut accumulator = String::new();
         let mut escape = false;
 
-        while let Some(ch) = self.chars.next() {
+        self.chars.next();
+
+        while let Some(&ch) = self.chars.peek() {
             match ch {
                 '"' if !escape => {
-                    self.chars.next();
                     break;
                 }
                 '\\' if !escape => {
                     escape = true;
+                    self.chars.next();
+                }
+                _ if escape => {
+                    accumulator.push(self.handle_escaped_seq()?);
+                    escape = false;
                 }
                 _ => {
-                    if escape {
-                        accumulator.push(self.handle_escaped_character()?);
-                        escape = false;
-                    } else {
-                        accumulator.push(ch);
-                    }
+                    accumulator.push(ch);
+                    self.chars.next();
                 }
             }
         }
+
+        self.chars.next();
 
         self.tokens.push(Token::Literal {
             kind: LiteralKind::String,
@@ -351,8 +374,7 @@ impl<'a> Lexer<'a> {
                     accumulator.push(ch);
                     self.chars.next();
                 }
-                c if c.is_whitespace() || ";.(){}[]".contains(c) => break,
-                _ => return Err(TokenizeError::UnrecognizedSymbol(ch)),
+                _ => break,
             }
         }
 
@@ -366,35 +388,70 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn tokenize_op(&mut self) -> Result<(), TokenizeError> {
-        let mut op_str = String::new();
+    fn tokenize_punctuation(&mut self) -> Result<(), TokenizeError> {
+        let first_char = self
+            .chars
+            .next()
+            .ok_or(TokenizeError::InvalidPunctuation("".to_string()))?;
 
-        for ch in self.chars.by_ref() {
-            if ch.is_whitespace() {
+        if let Some(token) = match first_char {
+            '(' => Some(Token::LeftParen),
+            ')' => Some(Token::RightParen),
+            '{' => Some(Token::LeftCurly),
+            '}' => Some(Token::RightCurly),
+            '[' => Some(Token::LeftSquare),
+            ']' => Some(Token::RightSquare),
+            _ => None,
+        } {
+            self.tokens.push(token);
+            return Ok(());
+        }
+
+        let mut punctuation = String::from(first_char);
+
+        while let Some(&ch) = self.chars.peek() {
+            if ch.is_alphanumeric()
+                || ch.is_whitespace()
+                || matches!(ch, '(' | ')' | '{' | '}' | '[' | ']')
+            {
                 break;
             }
 
-            op_str.push(ch);
+            punctuation.push(ch);
+            self.chars.next();
         }
 
-        match op_str.as_str() {
-            "=" => {
-                self.tokens.push(Token::Equals);
-                Ok(())
-            }
-            "//" => {
-                for ch in self.chars.by_ref() {
-                    if ch == '\n' {
-                        break;
-                    }
+        if punctuation == "//" {
+            for ch in self.chars.by_ref() {
+                if ch == '\n' {
+                    break;
                 }
-                Ok(())
             }
-            _ => {
-                let binary_op = BinaryOp::try_from(op_str)?;
-                self.tokens.push(Token::BinaryOp(binary_op));
-                Ok(())
-            }
+
+            return Ok(());
         }
+
+        self.tokens.push(match punctuation.as_str() {
+            "&" => Token::Amp,
+            "&&" => Token::AndAnd,
+            "|" => Token::Pipe,
+            "||" => Token::OrOr,
+            "!" => Token::Bang,
+            "!=" => Token::BangEq,
+            "=" => Token::Eq,
+            "==" => Token::EqEq,
+            "." => Token::Period,
+            "," => Token::Comma,
+            ":" => Token::Colon,
+            ";" => Token::Semicolon,
+            "*" => Token::Asterisk,
+            "/" => Token::Slash,
+            "%" => Token::Percent,
+            "+" => Token::Plus,
+            "-" => Token::Minus,
+            _ => return Err(TokenizeError::InvalidPunctuation(punctuation.to_string())),
+        });
+
+        Ok(())
     }
 }
