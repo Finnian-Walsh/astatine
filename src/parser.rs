@@ -1,61 +1,61 @@
-use std::{iter::Peekable, slice::Iter};
+use std::{collections::HashMap, iter::Peekable, slice::Iter};
 
 use color_eyre::eyre::Result;
 use thiserror::Error;
 
-use crate::lexer::Token;
-use crate::syntax::{BinaryOp, Bracket, Keyword, LiteralKind};
+use crate::{
+    lexer::Token,
+    syntax::{
+        Argument, BinaryOp, Declaration, Expression, FunctionDefinition, Keyword, PostfixOp,
+        PrefixOp, StructType,
+    },
+};
 
-#[derive(Debug)]
-pub enum Expression {
-    BinaryOperation(Box<Expression>, BinaryOp, Box<Expression>),
-    Call {
-        function: Box<Expression>,
-        args: Vec<Expression>,
-    },
-    Declaration {
-        name: String,
-        value: Box<Expression>,
-    },
-    Identifier(String),
-    Index {
-        container: Box<Expression>,
-        idx: Box<Expression>,
-    },
-    Literal {
-        kind: LiteralKind,
-        value: String,
-    },
+pub trait BindingPower {
+    fn binding_power(&self) -> u32;
 }
 
-#[derive(Debug)]
-pub struct Argument {
-    value: String,
-    tp: String,
+impl BindingPower for PrefixOp {
+    fn binding_power(&self) -> u32 {
+        todo!("implement prefix operator binding power")
+    }
 }
 
-#[derive(Debug)]
-pub enum Node {
-    Function {
-        name: String,
-        args: Vec<Argument>,
-        statements: Vec<Expression>,
-    },
-    ConstDecl {
-        name: String,
-        value: Box<Expression>,
-    },
+impl BindingPower for BinaryOp {
+    fn binding_power(&self) -> u32 {
+        match self {
+            Self::Multiply | Self::Divide | Self::Modulo => 100,
+            Self::Add | Self::Subtract => 99,
+            Self::ShiftL | Self::ShiftR => 98,
+            Self::BitAnd => 97,
+            Self::Xor => 96,
+            Self::BitOr => 95,
+            Self::Equal
+            | Self::NotEq
+            | Self::LessThan
+            | Self::GreaterThan
+            | Self::LessOrEqual
+            | Self::GreaterOrEqual => 94,
+            Self::And => 93,
+            Self::Or => 92,
+        }
+    }
 }
 
-pub struct Parser<'a> {
-    tokens: Peekable<Iter<'a, Token>>,
-    nodes: Vec<Node>,
+impl BindingPower for PostfixOp {
+    fn binding_power(&self) -> u32 {
+        todo!("implement postfix operator binding power")
+    }
 }
+
+#[derive(Clone, Debug, Error)]
+#[error("Could not convert `{0}` to binary operator")]
+pub struct OperatorConversionError(String);
 
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("Expected a token (context: {0})")]
-    ExpectedToken(&'static str),
+    #[error("Expected a token")]
+    ExpectedToken,
 
     #[error("Invalid expression (found `{0:?}`)")]
     InvalidExpression(Expression),
@@ -69,13 +69,57 @@ pub enum ParseError {
 }
 
 trait OptionExt<T> {
-    fn or_expected(self, context: &'static str) -> Result<T, ParseError>;
+    fn or_err(self) -> Result<T, ParseError>;
 }
 
 impl<T> OptionExt<T> for Option<T> {
-    fn or_expected(self, context: &'static str) -> Result<T, ParseError> {
-        self.ok_or(ParseError::ExpectedToken(context))
+    fn or_err(self) -> Result<T, ParseError> {
+        self.ok_or(ParseError::ExpectedToken)
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum Node {
+    Function(FunctionDefinition),
+
+    ConstDecl(Declaration),
+
+    StructDef(StructType),
+}
+
+macro_rules! reduce_token {
+    ($value:expr, $variant:pat) => {
+        match $value {
+            $variant => {}
+            tok => {
+                return Err(ParseError::UnexpectedToken(
+                    tok.clone(),
+                    stringify!($variant)
+                        .strip_prefix("Token::")
+                        .expect("failed to trim Token::"),
+                ))
+            }
+        }
+    };
+
+    ($value:expr, $variant:pat, $extracted_value:expr) => {
+        match $value {
+            $variant => $extracted_value,
+            tok => {
+                return Err(ParseError::UnexpectedToken(
+                    tok.clone(),
+                    stringify!($variant)
+                        .strip_prefix("Token::")
+                        .expect("failed to trim Token::"),
+                ))
+            }
+        }
+    };
+}
+
+pub struct Parser<'a> {
+    tokens: Peekable<Iter<'a, Token>>,
+    nodes: Vec<Node>,
 }
 
 impl<'a> Parser<'a> {
@@ -98,6 +142,7 @@ impl<'a> Parser<'a> {
             let node = match keyword {
                 Keyword::Const => self.parse_constant()?,
                 Keyword::Func => self.parse_func()?,
+                Keyword::Struct => self.parse_struct()?,
                 _ => return Err(ParseError::UnexpectedKeyword(keyword.clone())),
             };
 
@@ -108,144 +153,115 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_declaration(&mut self) -> Result<Expression, ParseError> {
-        self.tokens.next().or_expected("skipping declaration kw")?;
+        self.tokens.next().or_err()?;
 
-        let name_token = self
-            .tokens
-            .next()
-            .or_expected("taking identifier for declaration")?;
+        let name = reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
 
-        let Token::Identifier(name) = name_token else {
-            return Err(ParseError::UnexpectedToken(
-                name_token.clone(),
-                "an identifier for the name of the declaration",
-            ));
-        };
+        reduce_token!(self.tokens.next().or_err()?, Token::Eq);
 
-        let assignment_tok = self.tokens.next().or_expected("assignment token needed")?;
-        if !matches!(assignment_tok, Token::Equals) {
-            return Err(ParseError::UnexpectedToken(
-                assignment_tok.clone(),
-                "an equals sign for assignment",
-            ));
-        }
+        let expresion = self.parse_expr(0)?;
 
-        let expr = self
-            .parse_expr(|token| {
-                if matches!(token, Token::Semicolon) {
-                    Some(token.clone())
-                } else {
-                    None
-                }
-            })?
-            .0;
+        reduce_token!(self.tokens.next().or_err()?, Token::Semicolon);
 
         Ok(Expression::Declaration {
             name: name.to_string(),
-            value: Box::new(expr),
+            value: Box::new(expresion),
         })
     }
 
-    fn parse_expr(
-        &mut self,
-        end_predicate: fn(&Token) -> Option<Token>,
-    ) -> Result<(Expression, Token), ParseError> {
-        // operand expected
-        let mut expression = {
-            let first_token = self
-                .tokens
-                .next()
-                .or_expected("first token (for expression)")?;
+    fn parse_return(&mut self) -> Result<Expression, ParseError> {
+        self.tokens.next().or_err()?;
 
-            match first_token {
-                Token::Identifier(ident) => Expression::Identifier(ident.to_string()),
-                Token::Literal { kind, value } => Expression::Literal {
-                    kind: kind.clone(),
-                    value: value.to_string(),
-                },
-                // TODO: implement tuples
-                _ => {
+        let expression = self.parse_expr(0)?;
+
+        reduce_token!(self.tokens.next().or_err()?, Token::Semicolon);
+
+        Ok(Expression::Return(Box::new(expression)))
+    }
+
+    fn parse_expr(&mut self, min_binding_pow: u32) -> Result<Expression, ParseError> {
+        let first_token = self.tokens.next().or_err()?;
+
+        let mut lhs = match first_token {
+            Token::Literal { kind, value } => Expression::Literal {
+                kind: kind.clone(),
+                value: value.to_string(),
+            },
+
+            Token::Identifier(ident) => Expression::Identifier(ident.to_string()),
+
+            Token::LeftParen => {
+                let lhs = self.parse_expr(0)?;
+                let token = self.tokens.next().or_err()?;
+
+                if !matches!(token, Token::RightParen) {
                     return Err(ParseError::UnexpectedToken(
-                        (*first_token).clone(),
-                        "a literal or identifier for an expression",
+                        token.clone(),
+                        "a right parenthesis token",
                     ));
                 }
+
+                lhs
+            }
+
+            // TODO: add prefix operator support
+            _ => {
+                return Err(ParseError::UnexpectedToken(
+                    first_token.clone(),
+                    "a valid token for an expression",
+                ));
             }
         };
 
-        let mut next_token = self
-            .tokens
-            .next()
-            .or_expected("next token expected in expression")?;
+        loop {
+            let token = self.tokens.peek().or_err()?;
 
-        let terminator = loop {
-            if let Some(terminator) = end_predicate(next_token) {
-                break terminator;
-            }
+            let operator = match token {
+                Token::RightParen => break,
+                Token::LeftSquare => todo!("implement indexing"),
+                Token::RightSquare => break,
+                Token::Amp => BinaryOp::BitAnd,
+                Token::AndAnd => BinaryOp::And,
+                Token::Pipe => BinaryOp::BitOr,
+                Token::OrOr => BinaryOp::Or,
+                Token::BangEq => BinaryOp::NotEq,
+                Token::Eq => todo!("maybe implement something for ts later"), // error
+                Token::EqEq => BinaryOp::Equal,
+                Token::Period => todo!("implement period postfix operator"),
+                Token::Comma => todo!(),
+                Token::Semicolon => break,
+                Token::Asterisk => BinaryOp::Multiply,
+                Token::Slash => BinaryOp::Divide,
+                Token::Percent => BinaryOp::Modulo,
+                Token::Plus => BinaryOp::Add,
+                Token::Minus => BinaryOp::Subtract,
 
-            match next_token {
-                Token::Bracket(bracket) => match bracket {
-                    Bracket::LeftParen => {
-                        let mut args = vec![];
-
-                        loop {
-                            let (expr, terminator) = self.parse_expr(|token| {
-                                if matches!(
-                                    token,
-                                    Token::Comma | Token::Bracket(Bracket::RightParen)
-                                ) {
-                                    Some(token.clone())
-                                } else {
-                                    None
-                                }
-                            })?;
-
-                            args.push(expr);
-
-                            if terminator == Token::Bracket(Bracket::RightParen) {
-                                break;
-                            }
-                        }
-
-                        // the expression needs to be able to continue
-                        expression = Expression::Call {
-                            function: Box::new(expression),
-                            args,
-                        };
-                    }
-                    Bracket::LeftSquare => todo!("implement indexing"),
-                    _ => {
-                        return Err(ParseError::UnexpectedToken(
-                            next_token.clone(),
-                            "a left bracket (parenthesis or curly)",
-                        ));
-                    }
-                },
-                Token::BinaryOp(op) => {
-                    let (rhs, terminator) = self.parse_expr(end_predicate)?;
-
-                    return Ok((
-                        Expression::BinaryOperation(
-                            Box::new(expression),
-                            op.clone(),
-                            Box::new(rhs),
-                        ),
-                        terminator,
-                    ));
-                }
+                // TODO: add postfix operator support
                 _ => {
                     return Err(ParseError::UnexpectedToken(
-                        next_token.clone(),
-                        "a binary operator or a bracket for an expression operation",
+                        (*token).clone(),
+                        "infix operator for expression",
                     ));
                 }
+            };
+
+            let op_bp = operator.binding_power();
+
+            if min_binding_pow >= op_bp {
+                break;
             }
 
-            next_token = self.tokens.next().or_expected("getting next token")?;
-        };
+            self.tokens.next();
+            let rhs = self.parse_expr(op_bp)?;
 
-        Ok((expression, terminator))
-        // operator or termination expected
+            lhs = Expression::InfixOperation {
+                lhs: Box::new(lhs),
+                op: operator,
+                rhs: Box::new(rhs),
+            }
+        }
+
+        Ok(lhs)
     }
 
     fn parse_arg(&mut self) -> Result<Argument, ParseError> {
@@ -254,8 +270,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_func(&mut self) -> Result<Node, ParseError> {
-        self.tokens.next().or_expected("skipping function kw")?; // discard function marker
-        let name_tok = self.tokens.next().or_expected("function name required")?;
+        self.tokens.next().or_err()?; // discard function marker
+        let name_tok = self.tokens.next().or_err()?;
 
         let Token::Identifier(name) = name_tok else {
             return Err(ParseError::UnexpectedToken(
@@ -265,73 +281,90 @@ impl<'a> Parser<'a> {
         };
 
         // TODO: implement generics (not for a long time though)
-        let left_paren_tok = self
-            .tokens
-            .next()
-            .or_expected("left paren token expected")?;
-        if !matches!(left_paren_tok, Token::Bracket(Bracket::LeftParen)) {
+        let left_paren_tok = self.tokens.next().or_err()?;
+
+        if !matches!(left_paren_tok, Token::LeftParen) {
             return Err(ParseError::UnexpectedToken(
                 left_paren_tok.clone(),
                 "a left parenthesis for a function",
             ));
         }
 
-        let mut args = vec![];
+        let mut params = vec![];
 
-        while !matches!(
-            self.tokens
-                .peek()
-                .or_expected("token needed to compare to right paren")?,
-            Token::Bracket(Bracket::RightParen)
-        ) {
-            args.push(self.parse_arg()?);
+        while !matches!(self.tokens.peek().or_err()?, Token::RightParen) {
+            params.push(self.parse_arg()?);
         }
 
-        self.tokens.next().or_expected("skipping right paren")?;
+        self.tokens.next().or_err()?;
 
         let mut statements = vec![];
 
-        let left_curly_tok = self
-            .tokens
-            .next()
-            .or_expected("left curly token expected")?;
-        if !matches!(left_curly_tok, Token::Bracket(Bracket::LeftCurly)) {
-            return Err(ParseError::UnexpectedToken(
-                left_curly_tok.clone(),
-                "a left curly bracket for a function",
-            ));
+        match self.tokens.next().or_err()? {
+            Token::LeftCurly => {}
+            tok => return Err(ParseError::UnexpectedToken(tok.clone(), "left curly")),
         }
 
-        while !matches!(
-            self.tokens
-                .peek()
-                .or_expected("token needed to compare to right curly")?,
-            Token::Bracket(Bracket::RightCurly)
-        ) {
-            statements.push(
-                match self
-                    .tokens
-                    .peek()
-                    .or_expected("token needed for statement")?
-                {
-                    Token::Keyword(keyword) => match keyword {
-                        Keyword::Let => self.parse_declaration()?,
-                        _ => todo!("implement support for other keywords in statements"),
-                    },
-                    _ => todo!("implement other statements"),
+        while !matches!(self.tokens.peek().or_err()?, Token::RightCurly) {
+            statements.push(match self.tokens.peek().or_err()? {
+                Token::Keyword(keyword) => match keyword {
+                    Keyword::Let => self.parse_declaration()?,
+                    Keyword::Return => self.parse_return()?,
+                    _ => todo!("implement support for other keywords in statements"),
                 },
-            )
+                _ => todo!("implement other statements"),
+            })
         }
 
-        self.tokens
-            .next()
-            .or_expected("right curly at the end of a function")?;
+        match self.tokens.next().or_err()? {
+            Token::RightCurly => {}
+            tok => {
+                return Err(ParseError::UnexpectedToken(
+                    tok.clone(),
+                    "right curly token",
+                ));
+            }
+        };
 
-        Ok(Node::Function {
+        Ok(Node::Function(FunctionDefinition {
             name: name.to_string(),
-            args,
+            params,
             statements,
-        })
+        }))
+    }
+
+    fn parse_struct(&mut self) -> Result<Node, ParseError> {
+        reduce_token!(
+            self.tokens.next().or_err()?,
+            Token::Keyword(Keyword::Struct)
+        );
+
+        let struct_name =
+            reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
+
+        println!("{struct_name}");
+
+        let mut fields = HashMap::new();
+
+        reduce_token!(self.tokens.next().or_err()?, Token::LeftCurly);
+
+        while !matches!(self.tokens.peek(), Some(Token::RightCurly)) {
+            let field_name =
+                reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
+            reduce_token!(self.tokens.next().or_err()?, Token::Colon);
+
+            let field_type = reduce_token!(self.tokens.next().or_err()?, Token::Identifier(ty), ty);
+
+            fields.insert(field_name.to_string(), field_type.to_string());
+            reduce_token!(self.tokens.next().or_err()?, Token::Comma);
+        }
+
+        self.tokens.next();
+
+        Ok(Node::StructDef(StructType {
+            name: struct_name.to_string(),
+            fields,
+        }))
     }
 
     fn parse_constant(&mut self) -> Result<Node, ParseError> {
@@ -341,6 +374,9 @@ impl<'a> Parser<'a> {
             return Err(ParseError::InvalidExpression(expression));
         };
 
-        Ok(Node::ConstDecl { name, value })
+        Ok(Node::ConstDecl(Declaration {
+            name,
+            value: *value,
+        }))
     }
 }
