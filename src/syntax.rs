@@ -1,78 +1,4 @@
-use std::str::FromStr;
-
-use thiserror::Error;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum BinaryOp {
-    Multiply,
-    Divide,
-    Modulo,
-
-    Add,
-    Subtract,
-
-    ShiftL,
-    ShiftR,
-
-    BitAnd,
-    Xor,
-    BitOr,
-
-    Equal,
-    Unequal,
-    LessThan,
-    GreaterThan,
-    LessOrEqual,
-    GreaterOrEqual,
-
-    And,
-    Or,
-}
-
-#[derive(Clone, Debug, Error)]
-#[error("Could not convert to binary operator")]
-pub struct OperatorConversionError(String);
-
-impl TryFrom<String> for BinaryOp {
-    type Error = OperatorConversionError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Ok(match value.as_str() {
-            "*" => Self::Multiply,
-            "/" => Self::Divide,
-            "%" => Self::Modulo,
-
-            "+" => Self::Add,
-            "-" => Self::Subtract,
-
-            "<<" => Self::ShiftL,
-            ">>" => Self::ShiftR,
-            "&" => Self::BitAnd,
-            "^" => Self::Xor,
-            "|" => Self::BitOr,
-
-            "==" => Self::Equal,
-            "!=" => Self::Unequal,
-            "<" => Self::LessThan,
-            ">" => Self::GreaterThan,
-            "<=" => Self::LessOrEqual,
-            ">=" => Self::GreaterOrEqual,
-
-            "&&" => Self::And,
-            "||" => Self::Or,
-
-            _ => return Err(OperatorConversionError(value)),
-        })
-    }
-}
-
-impl TryFrom<&str> for BinaryOp {
-    type Error = OperatorConversionError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::try_from(value.to_string())
-    }
-}
+use std::{collections::HashMap, str::FromStr};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiteralKind {
@@ -106,7 +32,7 @@ impl FromStr for Keyword {
             "continue" => Ok(Self::Continue),
             "break" => Ok(Self::Break),
             "for" => Ok(Self::For),
-            "fn" => Ok(Self::Func),
+            "function" => Ok(Self::Func),
             "else" => Ok(Self::Else),
             "if" => Ok(Self::If),
             "let" => Ok(Self::Let),
@@ -118,14 +44,144 @@ impl FromStr for Keyword {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Bracket {
-    LeftParen,
-    RightParen,
-
-    LeftCurly,
-    RightCurly,
-
-    LeftSquare,
-    RightSquare,
+#[derive(Clone, Debug)]
+pub enum PrefixOp {
+    Negate,
+    Deref,
+    Not,
+    BitNot,
+    Reference,
 }
+
+#[derive(Clone, Debug)]
+pub enum BinaryOp {
+    Multiply,
+    Divide,
+    Modulo,
+
+    Add,
+    Subtract,
+
+    ShiftL,
+    ShiftR,
+
+    BitAnd,
+    Xor,
+    BitOr,
+
+    Equal,
+    NotEq,
+    LessThan,
+    GreaterThan,
+    LessOrEqual,
+    GreaterOrEqual,
+
+    And,
+    Or,
+}
+
+#[derive(Clone, Debug)]
+pub enum PostfixOp {
+    Call { args: Vec<Expression> },
+    Index(Box<Expression>),
+}
+
+#[derive(Clone, Debug)]
+pub enum Expression {
+    PrefixOperation {
+        op: PrefixOp,
+        rhs: Box<Expression>,
+    },
+
+    InfixOperation {
+        lhs: Box<Expression>,
+        op: BinaryOp,
+        rhs: Box<Expression>,
+    },
+
+    PostfixOperation {
+        lhs: Box<Expression>,
+        op: PostfixOp,
+    },
+
+    Call {
+        function: Box<Expression>,
+        args: Vec<Expression>,
+    },
+
+    Declaration {
+        name: String,
+        value: Box<Expression>,
+    },
+
+    Identifier(String),
+
+    Index {
+        lhs: Box<Expression>,
+        idx: Box<Expression>,
+    },
+
+    Literal {
+        kind: LiteralKind,
+        value: String,
+    },
+
+    Return(Box<Expression>),
+}
+
+#[derive(Clone, Debug)]
+pub struct Argument {
+    value: String,
+    value_type: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionDefinition {
+    pub name: String,
+    pub params: Vec<Argument>,
+    pub statements: Vec<Expression>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Declaration {
+    pub name: String,
+    pub value: Expression,
+}
+
+#[derive(Clone, Debug)]
+enum PrimitiveType {
+    Int,
+    Float,
+    String,
+}
+
+#[derive(Clone, Debug)]
+pub struct StructType {
+    pub name: String,
+    pub fields: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Type {
+    Primitive(PrimitiveType),
+    Struct(StructType),
+}
+
+impl Type {
+    pub fn name<'a>(&'a self) -> &'a str {
+        match self {
+            Self::Primitive(ty) => match ty {
+                PrimitiveType::Int => "int",
+                PrimitiveType::Float => "float",
+                PrimitiveType::String => "string",
+            },
+            Self::Struct(ty) => ty.name.as_str(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeId(pub usize);
+
+#[derive(Clone, Debug)]
+pub struct IdentifierId(pub usize);
