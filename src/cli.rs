@@ -10,4 +10,16 @@ pub struct Cli {
 
     #[arg(short)]
     pub output: Option<String>,
+
+    #[arg(long, alias = "tok", default_value_t = true)]
+    pub tokens: bool,
+
+    #[arg(long, default_value_t = true)]
+    pub ast: bool,
+
+    #[arg(long)]
+    pub asm: bool,
+
+    #[arg(long, alias = "obj")]
+    pub object: bool,
 }
