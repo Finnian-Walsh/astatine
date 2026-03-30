@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     parser::Node,
-    syntax::{Argument, Declaration, Expression, FunctionDefinition, IdentifierId, Type, TypeId},
+    syntax::{Declaration, Expression, FunctionDefinition, IdentifierId, PrefixOp, Type, TypeId},
 };
 
 // #[derive(Error)]
@@ -111,16 +111,23 @@ impl<'a> Generator<'a> {
     }
 
     pub fn generate_asm() {
-        // let labels = HashMap::new();
-        //
-        // let mut asm = "
-        //     global _start\n\
-        //     _start:\n\
-        // "
-        // .to_string();
-        //
-        // for (name, instructions) in labels {}
+        let labels: HashMap<String, String> = HashMap::new();
+
+        let mut asm = "
+            global _start\n\
+            _start:\n\
+        "
+        .to_string();
+
+        for (name, instructions) in labels {
+            asm.push_str(&format!("{name}:\n"));
+            todo!("{instructions}");
+        }
     }
 
-    fn const_eval(expr: Expression, value_type: TypeId) {}
+    fn const_eval(_expr: Expression, _value_type: TypeId) {
+        // TODO: implement constant evaluations
+
+        todo!()
+    }
 }
