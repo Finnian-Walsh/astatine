@@ -48,10 +48,6 @@ impl BindingPower for PostfixOp {
     }
 }
 
-#[derive(Clone, Debug, Error)]
-#[error("Could not convert `{0}` to binary operator")]
-pub struct OperatorConversionError(String);
-
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("Expected a token")]
@@ -87,30 +83,47 @@ pub enum Node {
     StructDef(StructType),
 }
 
-macro_rules! reduce_token {
+macro_rules! stringify_token {
+    ($($variant:tt)*) => {
+        stringify!($($variant)*)
+            .rsplit("::")
+            .next()
+            .expect("failed to split token variant")
+    };
+}
+
+macro_rules! extract_token {
     ($value:expr, $variant:pat) => {
         match $value {
             $variant => {}
             tok => {
                 return Err(ParseError::UnexpectedToken(
                     tok.clone(),
-                    stringify!($variant)
-                        .strip_prefix("Token::")
-                        .expect("failed to trim Token::"),
+                    stringify_token!($variant)
                 ))
             }
         }
     };
 
-    ($value:expr, $variant:pat, $extracted_value:expr) => {
+    ($value:expr, $variant:path, ($($fields:ident),*$(,)?)) => {
         match $value {
-            $variant => $extracted_value,
+            $variant($($fields),*) => ($($fields),*),
             tok => {
                 return Err(ParseError::UnexpectedToken(
                     tok.clone(),
-                    stringify!($variant)
-                        .strip_prefix("Token::")
-                        .expect("failed to trim Token::"),
+                    stringify_token!($variant)
+                ))
+            }
+        }
+    };
+
+    ($value:expr, $variant:path, {$($fields:ident),*$(,)?}) => {
+        match $value {
+            $variant{$($fields),*} => ($($fields),*),
+            tok => {
+                return Err(ParseError::UnexpectedToken(
+                    tok.clone(),
+                    stringify_token!($variant)
                 ))
             }
         }
@@ -155,13 +168,11 @@ impl<'a> Parser<'a> {
     fn parse_declaration(&mut self) -> Result<Expression, ParseError> {
         self.tokens.next().or_err()?;
 
-        let name = reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
-
-        reduce_token!(self.tokens.next().or_err()?, Token::Eq);
+        let name = extract_token!(self.tokens.next().or_err()?, Token::Identifier, (name));
+        extract_token!(self.tokens.next().or_err()?, Token::Eq);
 
         let expresion = self.parse_expr(0)?;
-
-        reduce_token!(self.tokens.next().or_err()?, Token::Semicolon);
+        extract_token!(self.tokens.next().or_err()?, Token::Semicolon);
 
         Ok(Expression::Declaration {
             name: name.to_string(),
@@ -174,7 +185,7 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expr(0)?;
 
-        reduce_token!(self.tokens.next().or_err()?, Token::Semicolon);
+        extract_token!(self.tokens.next().or_err()?, Token::Semicolon);
 
         Ok(Expression::Return(Box::new(expression)))
     }
@@ -316,15 +327,7 @@ impl<'a> Parser<'a> {
             })
         }
 
-        match self.tokens.next().or_err()? {
-            Token::RightCurly => {}
-            tok => {
-                return Err(ParseError::UnexpectedToken(
-                    tok.clone(),
-                    "right curly token",
-                ));
-            }
-        };
+        extract_token!(self.tokens.next().or_err()?, Token::RightCurly);
 
         Ok(Node::Function(FunctionDefinition {
             name: name.to_string(),
@@ -334,29 +337,26 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_struct(&mut self) -> Result<Node, ParseError> {
-        reduce_token!(
+        extract_token!(
             self.tokens.next().or_err()?,
             Token::Keyword(Keyword::Struct)
         );
 
-        let struct_name =
-            reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
-
-        println!("{struct_name}");
+        let struct_name = extract_token!(self.tokens.next().or_err()?, Token::Identifier, (name));
 
         let mut fields = HashMap::new();
 
-        reduce_token!(self.tokens.next().or_err()?, Token::LeftCurly);
+        extract_token!(self.tokens.next().or_err()?, Token::LeftCurly);
 
         while !matches!(self.tokens.peek(), Some(Token::RightCurly)) {
             let field_name =
-                reduce_token!(self.tokens.next().or_err()?, Token::Identifier(name), name);
-            reduce_token!(self.tokens.next().or_err()?, Token::Colon);
+                extract_token!(self.tokens.next().or_err()?, Token::Identifier, (name));
+            extract_token!(self.tokens.next().or_err()?, Token::Colon);
 
-            let field_type = reduce_token!(self.tokens.next().or_err()?, Token::Identifier(ty), ty);
+            let field_type = extract_token!(self.tokens.next().or_err()?, Token::Identifier, (ty));
 
             fields.insert(field_name.to_string(), field_type.to_string());
-            reduce_token!(self.tokens.next().or_err()?, Token::Comma);
+            extract_token!(self.tokens.next().or_err()?, Token::Comma);
         }
 
         self.tokens.next();
