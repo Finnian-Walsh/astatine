@@ -104,11 +104,6 @@ pub enum Expression {
         op: PostfixOp,
     },
 
-    Call {
-        function: Box<Expression>,
-        args: Vec<Expression>,
-    },
-
     Declaration {
         name: String,
         value: Box<Expression>,
