@@ -11,15 +11,19 @@ pub struct Cli {
     #[arg(short)]
     pub output: Option<String>,
 
-    #[arg(long, alias = "tok", default_value_t = true)]
+    #[cfg_attr(debug_assertions, arg(default_value_t = true))]
+    #[arg(long, alias = "tok")]
     pub tokens: bool,
 
-    #[arg(long, default_value_t = true)]
+    #[cfg_attr(debug_assertions, arg(default_value_t = true))]
+    #[arg(long)]
     pub ast: bool,
 
+    #[cfg_attr(debug_assertions, arg(default_value_t = true))]
     #[arg(long)]
     pub asm: bool,
 
+    #[cfg_attr(debug_assertions, arg(default_value_t = true))]
     #[arg(long, alias = "obj")]
     pub object: bool,
 }
