@@ -48,16 +48,7 @@ fn main() -> Result<()> {
         fs::write(ast_file, format!("{ast:#?}"))?;
     }
 
-    let asm = "
-        global _start\n\
-        _start:\n\
-        \tmov rax, 60\n\
-        \tmov rdi, 69\n\
-        \tsyscall\n\
-        ";
-
-    let generator = Generator::new(&ast);
-    dbg!(generator);
+    let asm = Generator::new(&ast).generate_asm();
 
     let asm_file = format!("{output_file}.asm");
     fs::write(&asm_file, asm)?;

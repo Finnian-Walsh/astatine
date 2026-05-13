@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use crate::{
     parser::Node,
-    syntax::{Declaration, Expression, FunctionDefinition, IdentifierId, PrefixOp, Type, TypeId},
+    syntax::{
+        Declaration, Expression, FunctionDefinition, IdentifierId, LiteralKind, Type, TypeId,
+    },
 };
 
 // #[derive(Error)]
 // enum Error {}
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum SymbolDefinition<'a> {
     Variable(&'a Declaration),
     Function(&'a FunctionDefinition),
@@ -17,7 +19,7 @@ enum SymbolDefinition<'a> {
 #[derive(Debug)]
 struct Symbol<'a> {
     name: String,
-    definition: Option<SymbolDefinition<'a>>,
+    definition: SymbolDefinition<'a>,
 }
 
 #[derive(Debug)]
@@ -72,6 +74,27 @@ impl TypeTable {
     }
 }
 
+pub enum ConstantResolveError<'a> {
+    NoDefinition(&'a str),
+    InvalidSymbol(&'a str, SymbolDefinition<'a>),
+}
+
+#[derive(Default)]
+struct RoDataSection {
+    entries: Vec<String>,
+}
+
+#[derive(Default)]
+struct TextSection {
+    entries: Vec<String>,
+}
+
+#[derive(Default)]
+pub struct Sections {
+    ro_data: RoDataSection,
+    text: TextSection,
+}
+
 #[derive(Debug)]
 pub struct Generator<'a> {
     ast: &'a [Node],
@@ -91,12 +114,12 @@ impl<'a> Generator<'a> {
             match node {
                 Node::Function(function) => global_symbols.push(Symbol {
                     name: function.name.clone(),
-                    definition: Some(SymbolDefinition::Function(function)),
+                    definition: SymbolDefinition::Function(function),
                 }),
                 Node::ConstDecl(decl) => {
                     global_symbols.push(Symbol {
                         name: decl.name.clone(),
-                        definition: Some(SymbolDefinition::Variable(decl)),
+                        definition: SymbolDefinition::Variable(decl),
                     });
                 }
                 Node::StructDef(struct_def) => types.push(Type::Struct(struct_def.clone())),
@@ -110,19 +133,86 @@ impl<'a> Generator<'a> {
         }
     }
 
-    pub fn generate_asm() {
-        let labels: HashMap<String, String> = HashMap::new();
-
-        let mut asm = "
-            global _start\n\
-            _start:\n\
-        "
-        .to_string();
-
-        for (name, instructions) in labels {
-            asm.push_str(&format!("{name}:\n"));
-            todo!("{instructions}");
+    pub fn resolve_constant(&self, declaration: &'a Declaration) -> Vec<String> {
+        // TODO: name mangling (use IDs)
+        match &declaration.value {
+            Expression::Literal { kind, value } => match kind {
+                LiteralKind::Char => todo!(),
+                LiteralKind::Integer => todo!(),
+                LiteralKind::Float => todo!(),
+                LiteralKind::String => {
+                    let mut lines = vec![];
+                    lines.push(format!("{} db \"{value}\"", declaration.name));
+                    lines.push(format!(
+                        "{}_len equ $ - {}",
+                        declaration.name, declaration.name,
+                    ));
+                    lines
+                }
+            },
+            _ => todo!("Implement constant abstract types"),
         }
+    }
+
+    pub fn generate_function(&self, definition: &FunctionDefinition) -> Vec<String> {
+        let mut lines = vec![];
+
+        lines.push(String::new());
+
+        if !definition.params.is_empty() {
+            lines.push(format!("; {:?}", definition.params));
+        }
+
+        lines.push(format!("{}:", definition.name));
+
+        lines.push("ret".to_string());
+        lines
+    }
+
+    pub fn generate_asm(&self) -> String {
+        // TODO: create intermediary section structures to be assembled together
+
+        let mut sections = Sections::default();
+
+        for symbol in &self.global_symbols.symbols {
+            match symbol.definition {
+                SymbolDefinition::Variable(declaration) => sections
+                    .ro_data
+                    .entries
+                    .extend(self.resolve_constant(declaration)),
+                SymbolDefinition::Function(function_definition) => {
+                    sections
+                        .text
+                        .entries
+                        .extend(self.generate_function(function_definition));
+                }
+            }
+        }
+
+        let mut asm = String::new();
+
+        asm.push_str("section .rodata\n\n");
+        for entry in sections.ro_data.entries {
+            asm.push_str(&entry);
+            asm.push('\n');
+        }
+
+        asm.push_str(
+            "section .text\n\n\
+            global _start\n\
+            _start:\n\n\
+            call main\n\n\
+            mov rdi, rax\n\
+            mov rax, 60\n\
+            syscall\n\
+            ",
+        );
+        for entry in sections.text.entries {
+            asm.push_str(&entry);
+            asm.push('\n')
+        }
+
+        asm
     }
 
     fn const_eval(_expr: Expression, _value_type: TypeId) {
