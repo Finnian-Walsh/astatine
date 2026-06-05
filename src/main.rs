@@ -2,6 +2,7 @@ mod cli;
 mod generator;
 mod lexer;
 mod parser;
+mod symbols;
 mod syntax;
 
 use std::{fs, path::Path, process::Command};

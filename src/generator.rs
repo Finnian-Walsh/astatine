@@ -1,78 +1,11 @@
-use std::collections::HashMap;
-
 use crate::{
     parser::Node,
-    syntax::{
-        Declaration, Expression, FunctionDefinition, IdentifierId, LiteralKind, Type, TypeId,
-    },
+    symbols::{Symbol, SymbolDefinition, SymbolTable, TypeTable},
+    syntax::{Declaration, Expression, FunctionDefinition, LiteralKind, PostfixOp, Type, TypeId},
 };
 
 // #[derive(Error)]
 // enum Error {}
-
-#[derive(Clone, Copy, Debug)]
-enum SymbolDefinition<'a> {
-    Variable(&'a Declaration),
-    Function(&'a FunctionDefinition),
-}
-
-#[derive(Debug)]
-struct Symbol<'a> {
-    name: String,
-    definition: SymbolDefinition<'a>,
-}
-
-#[derive(Debug)]
-struct SymbolTable<'a> {
-    id_map: HashMap<String, IdentifierId>,
-    symbols: Vec<Symbol<'a>>,
-    parent: Option<&'a SymbolTable<'a>>,
-}
-
-impl<'a> SymbolTable<'a> {
-    pub fn new() -> Self {
-        Self {
-            id_map: HashMap::new(),
-            symbols: vec![],
-            parent: None,
-        }
-    }
-
-    pub fn with_parent(parent: &'a SymbolTable) -> Self {
-        Self {
-            id_map: HashMap::new(),
-            symbols: vec![],
-            parent: Some(parent),
-        }
-    }
-
-    pub fn push(&mut self, symbol: Symbol<'a>) {
-        self.id_map
-            .insert(symbol.name.clone(), IdentifierId(self.symbols.len()));
-        self.symbols.push(symbol);
-    }
-}
-
-#[derive(Debug)]
-struct TypeTable {
-    types: Vec<Type>,
-    id_map: HashMap<String, TypeId>,
-}
-
-impl TypeTable {
-    pub fn new() -> Self {
-        Self {
-            types: vec![],
-            id_map: HashMap::new(),
-        }
-    }
-
-    pub fn push(&mut self, ty: Type) {
-        self.id_map
-            .insert(ty.name().to_string(), TypeId(self.types.len()));
-        self.types.push(ty);
-    }
-}
 
 pub enum ConstantResolveError<'a> {
     NoDefinition(&'a str),
@@ -97,9 +30,9 @@ pub struct Sections {
 
 #[derive(Debug)]
 pub struct Generator<'a> {
-    ast: &'a [Node],
+    _ast: &'a [Node],
 
-    types: TypeTable, // index via type id
+    _types: TypeTable, // index via type id
     global_symbols: SymbolTable<'a>,
 }
 
@@ -127,8 +60,8 @@ impl<'a> Generator<'a> {
         }
 
         Self {
-            ast,
-            types,
+            _ast: ast,
+            _types: types,
             global_symbols,
         }
     }
@@ -154,6 +87,10 @@ impl<'a> Generator<'a> {
         }
     }
 
+    pub fn generate_call(&self, _args: &Vec<Expression>) -> Vec<String> {
+        todo!("Call generation...")
+    }
+
     pub fn generate_function(&self, definition: &FunctionDefinition) -> Vec<String> {
         let mut lines = vec![];
 
@@ -164,6 +101,22 @@ impl<'a> Generator<'a> {
         }
 
         lines.push(format!("{}:", definition.name));
+
+        for statement in &definition.statements {
+            match statement {
+                Expression::PrefixOperation { op, rhs } => todo!(),
+                Expression::InfixOperation { lhs, op, rhs } => todo!(),
+                Expression::PostfixOperation { lhs, op } => match op {
+                    PostfixOp::Call { args } => lines.extend(self.generate_call(args)),
+                    PostfixOp::Index(expression) => todo!(),
+                },
+                Expression::Declaration { name, value } => todo!(),
+                Expression::Identifier(_) => todo!(),
+                Expression::Index { lhs, idx } => todo!(),
+                Expression::Literal { kind, value } => todo!(),
+                Expression::Return(expression) => todo!(),
+            }
+        }
 
         lines.push("ret".to_string());
         lines
@@ -207,6 +160,7 @@ impl<'a> Generator<'a> {
             syscall\n\
             ",
         );
+
         for entry in sections.text.entries {
             asm.push_str(&entry);
             asm.push('\n')
@@ -215,7 +169,7 @@ impl<'a> Generator<'a> {
         asm
     }
 
-    fn const_eval(_expr: Expression, _value_type: TypeId) {
+    fn _const_eval(_expr: Expression, _value_type: TypeId) {
         // TODO: implement constant evaluations
 
         todo!()
