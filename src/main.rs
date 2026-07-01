@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod cli;
 mod generator;
 mod lexer;

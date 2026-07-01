@@ -86,6 +86,10 @@ pub enum PostfixOp {
     Index(Box<Expression>),
 }
 
+// TODO: make this a vec or something
+#[derive(Clone, Debug)]
+pub struct AnnotatedType(pub String);
+
 #[derive(Clone, Debug)]
 pub enum Expression {
     PrefixOperation {
@@ -107,6 +111,7 @@ pub enum Expression {
     Declaration {
         name: String,
         value: Box<Expression>,
+        annotated_type: Option<AnnotatedType>,
     },
 
     Identifier(String),
@@ -141,10 +146,11 @@ pub struct FunctionDefinition {
 pub struct Declaration {
     pub name: String,
     pub value: Expression,
+    pub annotated_type: Option<AnnotatedType>,
 }
 
 #[derive(Clone, Debug)]
-enum PrimitiveType {
+pub enum PrimitiveType {
     Int,
     Float,
     String,
@@ -163,7 +169,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn name<'a>(&'a self) -> &'a str {
+    pub fn name(&self) -> &str {
         match self {
             Self::Primitive(ty) => match ty {
                 PrimitiveType::Int => "int",

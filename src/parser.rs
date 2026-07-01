@@ -6,8 +6,8 @@ use thiserror::Error;
 use crate::{
     lexer::Token,
     syntax::{
-        Argument, BinaryOp, Declaration, Expression, FunctionDefinition, Keyword, PostfixOp,
-        PrefixOp, StructType,
+        AnnotatedType, Argument, BinaryOp, Declaration, Expression, FunctionDefinition, Keyword,
+        PostfixOp, PrefixOp, StructType,
     },
 };
 
@@ -169,7 +169,19 @@ impl<'a> Parser<'a> {
         self.tokens.next().or_err()?;
 
         let name = extract_token!(self.tokens.next().or_err()?, Token::Identifier, (name));
-        extract_token!(self.tokens.next().or_err()?, Token::Eq);
+        let mut annotated_type = None;
+
+        match self.tokens.next().or_err()? {
+            Token::Colon => {
+                annotated_type = Some(AnnotatedType(
+                    extract_token!(self.tokens.next().or_err()?, Token::Identifier, (iden))
+                        .to_string(),
+                ));
+                extract_token!(self.tokens.next().or_err()?, Token::Eq);
+            }
+            Token::Eq => {}
+            tok => return Err(ParseError::UnexpectedToken(tok.clone(), "Colon or Eq")),
+        }
 
         let expresion = self.parse_expr(0)?;
         extract_token!(self.tokens.next().or_err()?, Token::Semicolon);
@@ -177,6 +189,7 @@ impl<'a> Parser<'a> {
         Ok(Expression::Declaration {
             name: name.to_string(),
             value: Box::new(expresion),
+            annotated_type,
         })
     }
 
@@ -370,13 +383,19 @@ impl<'a> Parser<'a> {
     fn parse_constant(&mut self) -> Result<Node, ParseError> {
         let expression = self.parse_declaration()?;
 
-        let Expression::Declaration { name, value } = expression else {
+        let Expression::Declaration {
+            name,
+            value,
+            annotated_type,
+        } = expression
+        else {
             return Err(ParseError::InvalidExpression(expression));
         };
 
         Ok(Node::ConstDecl(Declaration {
             name,
             value: *value,
+            annotated_type,
         }))
     }
 }

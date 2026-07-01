@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     parser::Node,
     symbols::{Symbol, SymbolDefinition, SymbolTable, TypeTable},
@@ -66,6 +68,27 @@ impl<'a> Generator<'a> {
         }
     }
 
+    pub fn evaluate_expression(&self, expr: &Expression) -> Vec<String> {
+        // let mut lines = vec![];
+
+        match expr {
+            Expression::PrefixOperation { op, rhs } => todo!(),
+            Expression::InfixOperation { lhs, op, rhs } => todo!(),
+            Expression::PostfixOperation { lhs, op } => todo!(),
+            Expression::Declaration {
+                name,
+                value,
+                annotated_type,
+            } => todo!(),
+            Expression::Identifier(iden) => todo!(),
+            Expression::Index { lhs, idx } => todo!(),
+            Expression::Literal { kind, value } => todo!(),
+            Expression::Return(expression) => todo!(),
+        }
+        // TODO: impl resolve expression
+        todo!("Resolve expression")
+    }
+
     pub fn resolve_constant(&self, declaration: &'a Declaration) -> Vec<String> {
         // TODO: name mangling (use IDs)
         match &declaration.value {
@@ -87,8 +110,14 @@ impl<'a> Generator<'a> {
         }
     }
 
-    pub fn generate_call(&self, _args: &Vec<Expression>) -> Vec<String> {
-        todo!("Call generation...")
+    pub fn generate_call(&self, args: &Vec<Expression>) -> Vec<String> {
+        let mut lines = vec![];
+
+        for arg in args {
+            self.resolve_expression(arg)
+        }
+
+        todo!("Finish this") // TODO: finish call generation
     }
 
     pub fn generate_function(&self, definition: &FunctionDefinition) -> Vec<String> {
@@ -102,6 +131,8 @@ impl<'a> Generator<'a> {
 
         lines.push(format!("{}:", definition.name));
 
+        // let variable_locations = HashMap::new();
+
         for statement in &definition.statements {
             match statement {
                 Expression::PrefixOperation { op, rhs } => todo!(),
@@ -110,7 +141,15 @@ impl<'a> Generator<'a> {
                     PostfixOp::Call { args } => lines.extend(self.generate_call(args)),
                     PostfixOp::Index(expression) => todo!(),
                 },
-                Expression::Declaration { name, value } => todo!(),
+                Expression::Declaration {
+                    name,
+                    value,
+                    annotated_type,
+                } => {
+                    // TODO: use the stack for the variables (registers later maybe ok)
+                    // variable_locations.insert(name, v)
+                    todo!()
+                }
                 Expression::Identifier(_) => todo!(),
                 Expression::Index { lhs, idx } => todo!(),
                 Expression::Literal { kind, value } => todo!(),
